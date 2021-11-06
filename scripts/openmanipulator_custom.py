@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Jungill kang 
+# 2021.11.07
+
+import rospy
+from std_msgs.msg import String
+from std_msgs.msg import Empty
+import os
+
+if os.name == 'nt':
+    import msvcrt
+    def getch():
+        return msvcrt.getch().decode()
+else:
+    import sys, tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    def getch():
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+from dynamixel_sdk import *                 # Uses Dynamixel SDK library
+from dxlhandler import DxlHandler # custom Dynamixel handler
+from open_manipulator_custom.srv import *
+
+
+# dynamixel handler
+dxlHandlerArray = []
+dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 11, DEVICENAME = '/dev/ttyUSB0'))
+dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 12, DEVICENAME = '/dev/ttyUSB0'))
+dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 13, DEVICENAME = '/dev/ttyUSB0'))
+dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 14, DEVICENAME = '/dev/ttyUSB0'))
+dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 15, DEVICENAME = '/dev/ttyUSB0'))
+
+
+def read_angle_callback(req):
+    rsp = AngleResponse()
+    for idx, dxlHandler in enumerate(dxlHandlerArray):
+        # Try to ping the Dynamixel
+        dxlHandler.ping()
+        rsp[idx] = 1
+    return rsp
+
+def read_angle_node():
+    rospy.init_node('read_angle_node')
+    rospy.Service('read_angle', Angle, read_angle_callback)
+    rospy.spin()
+
+def openmanipulator_custom():
+    for dxlHandler in dxlHandlerArray:
+        # Open port
+        dxlHandler.open_port()
+        # Set port baudrate
+        dxlHandler.set_baudrate()
+
+    # start the ping node
+    read_angle_node()
+
+    for dxlHandler in dxlHandlerArray:
+        # Close port
+        dxlHandler.close_port()
+
+def main():
+    openmanipulator_custom()
+
+if __name__ == '__main__':
+    try:
+        main()
+    except rospy.ROSInterruptException:
+        pass

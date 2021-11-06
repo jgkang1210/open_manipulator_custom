@@ -1,0 +1,8 @@
+float32 duration
+int32 max_time_step
+float32[] q1list
+float32[] q2list
+float32[] q3list
+float32[] q4list
+---
+bool success

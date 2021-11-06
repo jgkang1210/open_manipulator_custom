@@ -104,7 +104,7 @@ class DxlHandler:
 
     def set_angle(self, angle):
         dxl_goal_pwm = self.degree_to_pwm(angle)
-        print(dxl_goal_pwm)
+        # print(dxl_goal_pwm)
         dxl_comm_result, dxl_error = self.packetHandler.write4ByteTxRx(self.portHandler, self.DXL_ID, ADDR_GOAL_POSITION, dxl_goal_pwm)
         print("Setpoint Angle of ID %s = %s" % (self.DXL_ID, angle))
         if dxl_comm_result == COMM_SUCCESS:

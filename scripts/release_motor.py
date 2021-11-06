@@ -34,7 +34,7 @@ dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DX
 dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 14, DEVICENAME = '/dev/ttyUSB0'))
 dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 15, DEVICENAME = '/dev/ttyUSB0'))
 
-def realse_motor():
+def release_motor():
     for dxlHandler in dxlHandlerArray:
         # Open port
         dxlHandler.open_port()
@@ -44,7 +44,7 @@ def realse_motor():
         dxlHandler.torque_disable()
 
 def main():
-    realse_motor()
+    release_motor()
 
 if __name__ == '__main__':
     main()

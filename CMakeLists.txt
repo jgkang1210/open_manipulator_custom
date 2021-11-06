@@ -71,6 +71,8 @@ add_service_files(
   FILES
     ReadAngle.srv
     SetAngle.srv
+    SetAngleList.srv
+    DrawCircle.srv
     GetPosition.srv
     SyncGetPosition.srv
     BulkGetItem.srv
@@ -189,7 +191,8 @@ include_directories(
 # )
 catkin_install_python(PROGRAMS
   scripts/ping.py scripts/read_angle_service.py
-  scripts/set_angle_service.py
+  scripts/set_angle_service.py scripts/release_motor.py
+  scripts/openmanipulator_custom.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

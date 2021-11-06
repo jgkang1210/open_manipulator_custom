@@ -8,6 +8,8 @@ import rospy
 from std_msgs.msg import String
 from std_msgs.msg import Empty
 import os
+from math import cos, sin
+from numpy import deg2rad, rad2deg
 
 if os.name == 'nt':
     import msvcrt
@@ -28,6 +30,7 @@ else:
 from dynamixel_sdk import *                 # Uses Dynamixel SDK library
 from dxlhandler import DxlHandler # custom Dynamixel handler
 from open_manipulator_custom.srv import SetAngle, SetAngleResponse
+from open_manipulator_custom.srv import SetAngleList, SetAngleListResponse
 
 
 # dynamixel handler
@@ -37,6 +40,19 @@ dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DX
 dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 13, DEVICENAME = '/dev/ttyUSB0'))
 dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 14, DEVICENAME = '/dev/ttyUSB0'))
 dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DXL_ID = 15, DEVICENAME = '/dev/ttyUSB0'))
+
+def angle_to_pose(q1,q2,q3,q4):
+    BASE = [0, 0, 0]
+    MOTOR2 = [0,0,77/1000]
+    MOTOR3 = [(3*cos(q2)*sin(q1))/125 + (16*sin(q1)*sin(q2))/125, -(3*cos(q1)*cos(q2))/125-(16*cos(q1)*sin(q2))/125, (16*cos(q2))/125 - (3*sin(q2))/125 + 77/1000]
+    MOTOR4 = [(3*cos(q2)*sin(q1))/125 + (16*sin(q1)*sin(q2))/125 - (31*sin(q1)*sin(q2)*sin(q3))/250 + (31*cos(q2)*cos(q3)*sin(q1))/250,
+        (31*cos(q1)*sin(q2)*sin(q3))/250 - (16*cos(q1)*sin(q2))/125 - (31*cos(q1)*cos(q2)*cos(q3))/250 - (3*cos(q1)*cos(q2))/125,
+        (16*cos(q2))/125 - (3*sin(q2))/125 - (31*cos(q2)*sin(q3))/250 - (31*cos(q3)*sin(q2))/250 + 77/1000]
+    END = [((3*cos(q2)*sin(q1))/125 + (16*sin(q1)*sin(q2))/125 - (63*cos(q4)*(cos(q2)*sin(q1)*sin(q3) + cos(q3)*sin(q1)*sin(q2)))/500 + (63*sin(q4)*(sin(q1)*sin(q2)*sin(q3) - cos(q2)*cos(q3)*sin(q1)))/500 - (31*sin(q1)*sin(q2)*sin(q3))/250 + (31*cos(q2)*cos(q3)*sin(q1))/250),
+        ((63*cos(q4)*(cos(q1)*cos(q2)*sin(q3) + cos(q1)*cos(q3)*sin(q2)))/500 - (16*cos(q1)*sin(q2))/125 - (3*cos(q1)*cos(q2))/125 + (63*sin(q4)*(cos(q1)*cos(q2)*cos(q3) - cos(q1)*sin(q2)*sin(q3)))/500 - (31*cos(q1)*cos(q2)*cos(q3))/250 + (31*cos(q1)*sin(q2)*sin(q3))/250),
+        ((16*cos(q2))/125 - (3*sin(q2))/125 - (31*cos(q2)*sin(q3))/250 - (31*cos(q3)*sin(q2))/250 - (63*cos(q4)*(cos(q2)*cos(q3) - sin(q2)*sin(q3)))/500 + (63*sin(q4)*(cos(q2)*sin(q3) + cos(q3)*sin(q2)))/500 + 0.077)]
+ 
+    return END
 
 
 def set_angle_callback(req):
@@ -67,10 +83,49 @@ def set_angle_callback(req):
 
     return rsp
 
+def set_angle_list_callback(req):
+    rsp = SetAngleListResponse()
+    
+    offsetList = [90,180,180,90,0]
+
+    q1List = req.q1list
+    q2List = req.q2list
+    q3List = req.q3list
+    q4List = req.q4list
+    q5List = 0
+
+    print("set_angle_list service starts!")
+
+    duration = req.duration
+    max_time_step = req.max_time_step
+    single_time_step = duration/float(max_time_step)
+
+    for dxlHandler in dxlHandlerArray:
+            # check with led
+            dxlHandler.led_on()
+
+    for t in range(max_time_step):        
+        angleList = [q1List[t], q2List[t], q3List[t], q4List[t], q5List]
+        for idx, dxlHandler in enumerate(dxlHandlerArray):
+            # read current angle
+            success = dxlHandler.set_angle(rad2deg(angleList[idx])+offsetList[idx])
+            # read angle from dynamxiel
+            rsp.success = success
+            # END = angle_to_pose(q1List[t], q2List[t], q3List[t], q4List[t])
+            rospy.sleep(single_time_step/2)
+
+    # wait and turn off the led
+    for dxlHandler in dxlHandlerArray:
+        # check with led
+        dxlHandler.led_off()
+
+    return rsp
+
 def set_angle_node():
     rospy.init_node('set_angle_node')
     print("set_angle service on")
     rospy.Service('set_angle_service', SetAngle, set_angle_callback)
+    rospy.Service('set_angle_list_service', SetAngleList, set_angle_list_callback)
     # rospy.Publisher('current_angle', Angle, read_angle_callback)
     rospy.spin()
 

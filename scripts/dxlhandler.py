@@ -42,6 +42,17 @@ class DxlHandler:
             getch()
             quit()
 
+    def torque_enable(self):
+        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, self.DXL_ID, ADDR_TORQUE_ENABLE, 1)
+        if dxl_comm_result != COMM_SUCCESS:
+            print(dxl_comm_result)
+            print("Failed to enable torque for Dynamixel ID: %d" % self.DXL_ID)
+
+    def torque_disable(self):
+        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, self.DXL_ID, ADDR_TORQUE_ENABLE, 0)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("Failed to enable torque for Dynamixel ID: %d" % self.DXL_ID)
+
     # Import from robotis dynamixel sdk for reference
     
     #  def writeTxRx(self, port, dxl_id, address, length, data):
@@ -91,9 +102,23 @@ class DxlHandler:
         print("Present Angle of ID %s = %s" % (self.DXL_ID, dxl_present_angle))
         return dxl_present_angle
 
+    def set_angle(self, angle):
+        dxl_goal_pwm = self.degree_to_pwm(angle)
+        print(dxl_goal_pwm)
+        dxl_comm_result, dxl_error = self.packetHandler.write4ByteTxRx(self.portHandler, self.DXL_ID, ADDR_GOAL_POSITION, dxl_goal_pwm)
+        print("Setpoint Angle of ID %s = %s" % (self.DXL_ID, angle))
+        if dxl_comm_result == COMM_SUCCESS:
+            return True
+        else:
+            return False
+
     def pwm_to_degree(self,pwm):
         angle = float(pwm/4095.0*360.0)
         return angle
+
+    def degree_to_pwm(self,angle):
+        pwm = int(float(int(angle)%360)/360*4095)
+        return pwm
 
     def close_port(self):
         self.portHandler.closePort()

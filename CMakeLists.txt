@@ -69,7 +69,8 @@ add_message_files(
 # )
 add_service_files(
   FILES
-    Angle.srv
+    ReadAngle.srv
+    SetAngle.srv
     GetPosition.srv
     SyncGetPosition.srv
     BulkGetItem.srv
@@ -188,6 +189,7 @@ include_directories(
 # )
 catkin_install_python(PROGRAMS
   scripts/ping.py scripts/read_angle_service.py
+  scripts/set_angle_service.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -60,6 +60,7 @@ add_message_files(
     SetPosition.msg
     SyncSetPosition.msg
     BulkSetItem.msg
+    Rtvecs.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -200,6 +201,7 @@ catkin_install_python(PROGRAMS
   scripts/ping.py scripts/read_angle_service.py
   scripts/set_angle_service.py scripts/release_motor.py
   scripts/openmanipulator_custom.py
+  scripts/aruco_detect.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

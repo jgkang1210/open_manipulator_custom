@@ -10,6 +10,7 @@ import numpy as np
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
+from open_manipulator_custom.msg import Rtvecs
 
 # arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_50)
 # arucoParams = cv2.aruco.DetectorParameters_create()
@@ -36,8 +37,9 @@ class camHandler():
         else:
             self._sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.callback, queue_size=1)
  
-        #self.rtpub = rospy.Publisher()
+        self.rtpub = rospy.Publisher('/rtvecs', Rtvecs, queue_size=10)
         self.bridge = CvBridge()
+        # self.timer = rospy.Rate(100) # 100Hz
  
     def callback(self, image_msg):
         if self.selecting_sub_image == "compressed":
@@ -66,6 +68,23 @@ class camHandler():
             #(rvecs-tvecs).any() 
             cv2.aruco.drawDetectedMarkers(cv_image, corners)
             cv2.aruco.drawAxis(cv_image,camMatrix,distCoeffs,rvecs,tvecs,0.1)
+            print(rvecs.reshape(-1,3))
+            print(tvecs.reshape(-1,3))
+            
+            rvecmsg = rvecs.reshape(-1,3)
+            tvecmsg = tvecs.reshape(-1,3)
+            for i in range(len(ids)):
+                msg = Rtvecs()
+                msg.id = ids[i]
+                msg.rvec1 = rvecmsg[i][0]
+                msg.rvec2 = rvecmsg[i][1]
+                msg.rvec3 = tvecmsg[i][2]
+                msg.tvec1 = tvecmsg[i][0]
+                msg.tvec2 = tvecmsg[i][1]
+                msg.tvec3 = tvecmsg[i][2]
+                self.rtpub.publish(msg)
+
+
         cv2.imshow('cv_image', cv_image), cv2.waitKey(1)
 
 def aruco_detect_node():

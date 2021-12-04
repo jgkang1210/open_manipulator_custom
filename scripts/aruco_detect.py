@@ -4,6 +4,21 @@
 # Jungill kang 
 # 2021.11.11
 
+#######################################################################################
+## ROS aruco marker detection node
+## 
+## USAGE : rosrun usb_cam usb_cam_node (run usb_cam_node from usb_cam package)
+##         rosrun open_manipulator_custom aruco_detect.py
+##
+## Subscription
+##      /usb_cam/image_raw --> image data subcription from usb_cam node
+##
+## Publishing
+##      /rtvecs  --> publishing the rotation and translation vector
+## 
+#######################################################################################
+
+
 import rospy
 import cv2
 import numpy as np
@@ -16,6 +31,7 @@ from open_manipulator_custom.msg import Rtvecs
 # arucoParams = cv2.aruco.DetectorParameters_create()
 # (corners, ids, rejected) = cv2.aruco.detectMarkers(image, arucoDict,
 # 	parameters=arucoParams)
+
 
 # calibrated camera coefficietns
 camMatrix = np.array([[637.51624, 0., 317.66075],
@@ -83,7 +99,6 @@ class camHandler():
                 msg.tvec2 = tvecmsg[i][1]
                 msg.tvec3 = tvecmsg[i][2]
                 self.rtpub.publish(msg)
-
 
         cv2.imshow('cv_image', cv_image), cv2.waitKey(1)
 

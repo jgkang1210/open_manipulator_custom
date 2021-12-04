@@ -32,6 +32,19 @@
 #  Maintainer : Zerom, Will Son
 # *******************************************************************************
 
+#######################################################################################
+## ROS ping to Dynamixel
+## 
+## USAGE : rosrun open_manipulator_custom ping.py
+##         rostopic pub /ping std_msgs/Empty "{}"
+##         
+##
+## Subscription
+##      /ping --> get the user ping signal and send ping to dynamixel
+##
+## 
+#######################################################################################
+
 import rospy
 from std_msgs.msg import String
 from std_msgs.msg import Empty

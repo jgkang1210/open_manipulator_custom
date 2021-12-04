@@ -4,6 +4,19 @@
 # Jungill kang 
 # 2021.11.07
 
+#######################################################################################
+## ROS read angle of Dynamixel
+## 
+## USAGE : rosrun open_manipulator_custom read_angle_service.py
+##         rosservice call /read_angle_service std_msgs/Empty "{}"
+##         
+##
+## Service
+##      /read_angle_service --> read all 5 angle data from openmanipulator and send back
+##
+## 
+#######################################################################################
+
 import rospy
 from std_msgs.msg import String
 from std_msgs.msg import Empty

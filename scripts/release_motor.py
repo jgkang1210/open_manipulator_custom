@@ -4,6 +4,16 @@
 # Jungill kang 
 # 2021.11.07
 
+#######################################################################################
+## ROS release motor
+## 
+## USAGE : rosrun open_manipulator_custom release_motor.py
+##         
+##         It release the motor power
+##
+## 
+#######################################################################################
+
 import os
 
 if os.name == 'nt':

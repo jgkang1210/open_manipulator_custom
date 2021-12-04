@@ -78,6 +78,7 @@ add_service_files(
     GetPosition.srv
     SyncGetPosition.srv
     BulkGetItem.srv
+    GrabMarker.srv
 )
 
 ## Generate actions in the 'action' folder

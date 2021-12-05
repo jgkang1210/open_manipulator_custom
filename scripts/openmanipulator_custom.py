@@ -76,31 +76,45 @@ dxlHandlerArray.append(DxlHandler(PROTOCOL_VERSION = 2.0, BAUDRATE = 1000000, DX
 
 class manipulatorHanlder():
     def __init__(self):
+        # servcie and subscirber list
         self.draw_circle_service = rospy.Service('draw_circle', DrawCircle, self.draw_circle_callback)
         self.grab_marker_service = rospy.Service('grab_marker', GrabMarker, self.grab_marker_callback)
         self.rtvec_subscriber = rospy.Subscriber('/rtvecs', Rtvecs, self.grab_marker_callback, queue_size=10)
+        # rotation and translation vector
         self.rvecs = np.array([0,0,0])
         self.tvecs = np.array([0,0,0])
-
+        # id of aruco marker
+        self.id = 0
+        # angle of joint 1,2,3,4
+        self.q1 = 0
+        self.q2 = 0
+        self.q3 = 0
+        self.q4 = 0
+        # joint grab or not
+        self.grab = False
+    
+    ##############################################
+    # util function
+    ##############################################
     def ROTX(self, theta):
-        return np.array(
+        return np.array([
             [1, 0, 0],
             [0, cos(theta), -sin(theta)],
-            [0, sin(theta), cos(theta)])
+            [0, sin(theta), cos(theta)]], dtype=float)
 
     def ROTY(self, theta):
-        return np.array(
+        return np.array([
             [cos(theta), 0, sin(theta)],
             [0, 1, 0],
-            [-sin(theta), 0, cos(theta)])
+            [-sin(theta), 0, cos(theta)]], dtype=float)
 
     def ROTZ(self, theta):
-        return np.array(
+        return np.array([
             [cos(theta), -sin(theta), 0],
             [sin(theta), cos(theta), 0],
-            [0, 0, 1])
+            [0, 0, 1]], dtype=float)
 
-    def angle_to_pose(self, q1,q2,q3,q4):
+    def angle_to_pose(self, q1, q2, q3, q4):
         BASE = [0, 0, 0]
         MOTOR2 = [0,0,77/1000]
         MOTOR3 = [(3*cos(q2)*sin(q1))/125 + (16*sin(q1)*sin(q2))/125, -(3*cos(q1)*cos(q2))/125-(16*cos(q1)*sin(q2))/125, (16*cos(q2))/125 - (3*sin(q2))/125 + 77/1000]
@@ -113,33 +127,27 @@ class manipulatorHanlder():
     
         return END
 
-    def angle_to_rotation(self, q1,q2,q3,q4):
-        l1 = 0.077
-        l21 = 0.128
-        l22 = 0.024
-        l3 = 0.124
-        l4 = 0.126
-
-        R_final = np.eye(3)
+    def angle_to_rotation(self, q1, q2, q3, q4):
+        R_final = np.eye(3, dtype=float)
 
         # world to base motor(1)
         R01 = self.ROTZ(q1)
         R_final = np.matmul(R_final, R01)
 
         # base motor(1) to base motor(2)
-        ROTY90 = np.array(
+        ROTY90 = np.array([
             [0, 0, 1],
             [0, 1, 0],
-            [-1, 0, 1])
-        R12 = ROTY90*self.ROTZ(q2)
+            [-1, 0, 0]], dtype=float)
+        R12 = np.matmul(ROTY90, self.ROTZ(q2))
         R_final = np.matmul(R_final, R12)
 
         # base motor(2) to base motor(3)
-        R23 = ROTY90*self.ROTZ(q3)
+        R23 = self.ROTZ(q3)
         R_final = np.matmul(R_final, R23)
 
         # base motor(3) to base motor(4)
-        R34 = ROTY90*self.ROTZ(q4)
+        R34 = self.ROTZ(q4)
         R_final = np.matmul(R_final, R34)
 
         # base motor(4) to end effector
@@ -159,6 +167,32 @@ class manipulatorHanlder():
     
         return [END[0]-x, END[1]-y, END[2]-z, 0]
 
+    def rotation_error(self, var, data):
+        R_desired = data[0]
+        (q1,q2,q3,q4) = var
+
+        R_current = self.angle_to_rotation(q1,q2,q3,q4)
+        
+        print("--R current --")
+        print(R_current)
+        print("--R current --")
+
+        print("--R_desired--")
+        print(R_desired)
+        print("--R_desired--")
+
+        ERROR = [
+        R_desired[0][0] - R_current[0][0], R_desired[0][1] - R_current[0][1], R_desired[0][2] - R_current[0][2],
+        R_desired[1][0] - R_current[1][0], R_desired[1][1] - R_current[1][1], R_desired[1][2] - R_current[1][2],
+        R_desired[2][0] - R_current[2][0], R_desired[2][1] - R_current[2][1], R_desired[2][2] - R_current[2][2],]
+
+        return ERROR
+
+    ##############################################
+    # service and publisher
+    ##############################################
+
+    # draw the circle
     def draw_circle_callback(self, req):
         rsp = DrawCircleResponse()
         
@@ -207,18 +241,30 @@ class manipulatorHanlder():
         
         return rsp
 
-    def grab_marker_callback(self, rtvec_msg):
-        id = rtvec_msg.id
+    # grab the marker
+    def grab_marker_callback(self, req):
+        # response for the Grab marker service
+        rsp = DrawCircleResponse()
 
-        if id == 1:
+        # get current angle
+        rospy.wait_for_service('read_angle_service')
+
+        try:
+            empty = Empty()
+            read_angle = rospy.ServiceProxy('read_angle_service', ReadAngle)
+            read_angle_resp = read_angle(empty)
+            if read_angle_resp.success == True:
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            rsp.success = False
+
+        if self.id == 1:
             print("recognize id ice americano")
 
         # get rotation and translation vector from aruco marker
-        rvecs = [rtvec_msg.rvec1, rtvec_msg.rvec2, rtvec_msg.rvec3]
-        tvecs = [rtvec_msg.tvec1, rtvec_msg.tvec2, rtvec_msg.tvec3]
-        rvecs = np.array(rvecs)
-        R_cam_end = cv2.Rodrigues(rvecs)[0]
-        p_cam_end = np.array(tvecs)
+        R_cam_end = cv2.Rodrigues(self.rvecs)[0]
+        p_cam_end = np.array(self.tvecs)
 
         T_base_cam = np.array(
             [0, 1/sqrt(2), -1/sqrt(2), 0.065],
@@ -227,8 +273,10 @@ class manipulatorHanlder():
             [0, 0, 0, 1],
         )
         
-        # response for the Grab marker service
-        rsp = DrawCircleResponse()
+        # get rotation and translation vector of end effector W.R.T base frame
+        R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
+        p_base_end = self.angle_to_pose(self.q1, self.q2, self.q3, self.q4)
+        
         
         q1list = []
         q2list = []
@@ -239,29 +287,16 @@ class manipulatorHanlder():
         max_time_step = 4000
         single_time_step = duration/max_time_step
 
-        # get current angle
-        rospy.wait_for_service('read_angle_service')
-
-        try:
-            empty = Empty()
-            read_angle = rospy.ServiceProxy('read_angle_service', ReadAngle)
-            resp = read_angle(empty)
-            if resp.success == True:
-                rsp.success = True
-        except rospy.ServiceException as e:
-            print("Service call failed: %s"%e)
-            rsp.success = False
-
-
+        q0 = [read_angle_resp.position1, read_angle_resp.position2, read_angle_resp.position3, read_angle_resp.position4]
 
         for i in range(max_time_step):
-            x = 
-            y = 
-            z = 
+            # current time
+            t = i * single_time_step
 
-            q1, q2, q3 ,q4 = fsolve(pose_error, q0, args=[x,y,z])
-            
-            END = angle_to_pose(q1,q2,q3,q4)
+            q1, q2, q3 ,q4 = fsolve(self.rotation_error, q0, args=[R])
+            q0 = [q1, q2, q3, q4]
+
+            END = self.angle_to_pose(q1,q2,q3,q4)
             print("q1 : %f q2 : %f q3 : %f q4 : %f" % (q1, q2, q3, q4))
             print("X : %f Y : %f Z : %f" % (END[0],END[1],END[2]))
 
@@ -283,6 +318,22 @@ class manipulatorHanlder():
             rsp.success = False
 
         print(R)
+
+    # get r and t vector
+    def rtvec_callback(self, rtvec_msg):
+        id = rtvec_msg.id
+
+        self.id = id
+
+        if id == 1:
+            print("recognize id ice americano")
+
+        # get rotation and translation vector from aruco marker
+        rvecs = [rtvec_msg.rvec1, rtvec_msg.rvec2, rtvec_msg.rvec3]
+        tvecs = [rtvec_msg.tvec1, rtvec_msg.tvec2, rtvec_msg.tvec3]
+
+        self.rvecs = np.array(rvecs)
+        self.tvecs = np.array(tvecs)
 
 
 def manipulator_node():

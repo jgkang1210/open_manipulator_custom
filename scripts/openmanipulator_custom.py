@@ -61,6 +61,7 @@ else:
 from dynamixel_sdk import *                 # Uses Dynamixel SDK library
 from dxlhandler import DxlHandler # custom Dynamixel handler
 from open_manipulator_custom.srv import DrawCircle, DrawCircleResponse
+from open_manipulator_custom.srv import SetAngle, SetAngleResponse
 from open_manipulator_custom.srv import SetAngleList, SetAngleListResponse
 from open_manipulator_custom.msg import Rtvecs
 from open_manipulator_custom.srv import ReadAngle, ReadAngleResponse
@@ -92,6 +93,8 @@ class manipulatorHanlder():
         self.q4 = 0
         # joint grab or not
         self.grab = False
+        self.gripper_open = 140 # open
+        self.gripper_clise = 20 # close
     
     ##############################################
     # util function
@@ -256,9 +259,19 @@ class manipulatorHanlder():
             if read_angle_resp.success == True:
                 rsp.success = True
         except rospy.ServiceException as e:
-            print("Service call failed: %s"%e)
+            print("Service call failed: %s" % e)
             rsp.success = False
 
+        q0 = [read_angle_resp.position1, read_angle_resp.position2, read_angle_resp.position3,
+              read_angle_resp.position4]  # read angle from the sensor
+
+        # update angle
+        self.q1 = q0[0]
+        self.q2 = q0[1]
+        self.q3 = q0[2]
+        self.q4 = q0[3]
+
+        # data from the marker
         if self.id == 1:
             print("recognize id ice americano")
 
@@ -267,45 +280,101 @@ class manipulatorHanlder():
         p_cam_end = np.array(self.tvecs)
 
         T_base_cam = np.array(
-            [0, 1/sqrt(2), -1/sqrt(2), 0.065],
+            [0, 1 / sqrt(2), -1 / sqrt(2), 0.065],
             [-1, 0, 0, 0.115],
-            [0, -1/sqrt(2), -1/sqrt(2), 0.265],
+            [0, -1 / sqrt(2), -1 / sqrt(2), 0.265],
             [0, 0, 0, 1],
         )
-        
-        # get rotation and translation vector of end effector W.R.T base frame
+
+        # 1.
+        # open the gripper
+        # get current angle
+        rospy.wait_for_service('set_angle_service')
+
+        try:
+            set_angle_req = SetAngle()
+            set_angle_req.position1 = self.q1
+            set_angle_req.position2 = self.q2
+            set_angle_req.position3 = self.q3
+            set_angle_req.position4 = self.q4
+            set_angle_req.position5 = self.gripper_open
+            set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
+            set_angle_resp = set_angle(set_angle_req)
+            if set_angle_resp.success == True:
+                print("gripper open!;")
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
+            rsp.success = False
+
+        # 2.
+        # calculate the angle to the cup
+        p_cam_cup = np.array([p_cam_end[0], p_cam_end[1], p_cam_end[2], 1]).T
+        p_base_cup = np.matmul(T_base_cam, p_cam_cup)
+        rotate_angle = atan2(p_cam_cup[1], p_cam_cup[0])  # atan2(y,x)
+        desired_z = p_cam_cup[2]
+
+        # rotate(rotate_angle)
+        rospy.wait_for_service('set_angle_service')
+
+        try:
+            set_angle_req = SetAngle()
+            set_angle_req.position1 = rotate_angle
+            set_angle_req.position2 = self.q2
+            set_angle_req.position3 = self.q3
+            set_angle_req.position4 = self.q4
+            set_angle_req.position5 = self.gripper_open
+            set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
+            set_angle_resp = set_angle(set_angle_req)
+            if set_angle_resp.success == True:
+                print("rotate suceed!")
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
+            rsp.success = False
+
+        # 3. get rotation and translation vector of end effector W.R.T base frame
+        # 3rd order polynomial
         R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
         p_base_end = self.angle_to_pose(self.q1, self.q2, self.q3, self.q4)
         
+        R = np.eye(3)
         
+        p_base_cup = np.array([p_base_cup[0], p_base_cup[1], p_base_cup[2]])
+
+        Xstart = mr.RpToTrans(R, p_base_end)
+        Xend = mr.RpToTrans(R, p_base_cup)
+
+        duration = 5  # total time
+        max_time_step = 50  # number of data point
+        method = 3  # third order
+
+        trajectory = mr.CartesianTrajectory(Xstart, Xend, duration, max_time_step, method)
+
         q1list = []
         q2list = []
         q3list = []
         q4list = []
 
-        duration = 5.0
-        max_time_step = 4000
-        single_time_step = duration/max_time_step
-
-        q0 = [read_angle_resp.position1, read_angle_resp.position2, read_angle_resp.position3, read_angle_resp.position4]
+        single_time_step = duration / max_time_step
 
         for i in range(max_time_step):
-            # current time
-            t = i * single_time_step
+            current_trajectory = trajectory[i]
+            x = current_trajectory[0][3]
+            y = current_trajectory[1][3]
+            z = current_trajectory[2][3]
 
-            q1, q2, q3 ,q4 = fsolve(self.rotation_error, q0, args=[R])
-            q0 = [q1, q2, q3, q4]
+            q1, q2, q3, q4 = fsolve(self.pose_error, q0, args=[x, y, z])
 
-            END = self.angle_to_pose(q1,q2,q3,q4)
+            END = self.angle_to_pose(q1, q2, q3, q4)
             print("q1 : %f q2 : %f q3 : %f q4 : %f" % (q1, q2, q3, q4))
-            print("X : %f Y : %f Z : %f" % (END[0],END[1],END[2]))
+            print("X : %f Y : %f Z : %f" % (END[0], END[1], END[2]))
 
             q1list.append(q1)
             q2list.append(q2)
             q3list.append(q3)
             q4list.append(q4)
-            
-        
+
         rospy.wait_for_service('set_angle_list_service')
 
         try:
@@ -314,10 +383,124 @@ class manipulatorHanlder():
             if resp.success == True:
                 rsp.success = True
         except rospy.ServiceException as e:
-            print("Service call failed: %s"%e)
+            print("Service call failed: %s" % e)
+            rsp.success = False
+            
+        
+        # get current angle
+        rospy.wait_for_service('read_angle_service')
+
+        try:
+            empty = Empty()
+            read_angle = rospy.ServiceProxy('read_angle_service', ReadAngle)
+            read_angle_resp = read_angle(empty)
+            if read_angle_resp.success == True:
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
             rsp.success = False
 
-        print(R)
+        q0 = [read_angle_resp.position1, read_angle_resp.position2, read_angle_resp.position3,
+              read_angle_resp.position4]  # read angle from the sensor
+
+        # update angle
+        self.q1 = q0[0]
+        self.q2 = q0[1]
+        self.q3 = q0[2]
+        self.q4 = q0[3]
+        
+        # close the gripper
+        rospy.wait_for_service('set_angle_service')
+
+        try:
+            set_angle_req = SetAngle()
+            set_angle_req.position1 = self.q1
+            set_angle_req.position2 = self.q2
+            set_angle_req.position3 = self.q3
+            set_angle_req.position4 = self.q4
+            set_angle_req.position5 = self.gripper_close
+            set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
+            set_angle_resp = set_angle(set_angle_req)
+            if set_angle_resp.success == True:
+                print("gripper closed!")
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
+            rsp.success = False
+
+        # pull up
+        # 3rd order polynomial
+        R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
+        p_base_end = self.angle_to_pose(self.q1, self.q2, self.q3, self.q4)
+
+        R = np.eye(3)
+        
+        p_base_z_up = np.array([p_base_end[0] - 0.1, p_base_end[1], p_base_end[2] + 0.1])
+
+        Xstart = mr.RpToTrans(R, p_base_end)
+        Xend = mr.RpToTrans(R, p_base_cup)
+
+        duration = 5  # total time
+        max_time_step = 50  # number of data point
+        method = 3  # third order
+
+        trajectory = mr.CartesianTrajectory(Xstart, Xend, duration, max_time_step, method)
+
+        q1list = []
+        q2list = []
+        q3list = []
+        q4list = []
+
+        single_time_step = duration / max_time_step
+
+        for i in range(max_time_step):
+            current_trajectory = trajectory[i]
+            x = current_trajectory[0][3]
+            y = current_trajectory[1][3]
+            z = current_trajectory[2][3]
+
+            q1, q2, q3, q4 = fsolve(self.pose_error, q0, args=[x, y, z])
+
+            END = self.angle_to_pose(q1, q2, q3, q4)
+            print("q1 : %f q2 : %f q3 : %f q4 : %f" % (q1, q2, q3, q4))
+            print("X : %f Y : %f Z : %f" % (END[0], END[1], END[2]))
+
+            q1list.append(q1)
+            q2list.append(q2)
+            q3list.append(q3)
+            q4list.append(q4)
+
+        rospy.wait_for_service('set_angle_list_service')
+
+        try:
+            set_angle_list = rospy.ServiceProxy('set_angle_list_service', SetAngleList)
+            resp = set_angle_list(duration, max_time_step, q1list, q2list, q3list, q4list)
+            if resp.success == True:
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
+            rsp.success = False
+        
+        # rotate(initial pose)
+        rospy.wait_for_service('set_angle_service')
+
+        try:
+            set_angle_req = SetAngle()
+            set_angle_req.position1 = 0
+            set_angle_req.position2 = self.q2
+            set_angle_req.position3 = self.q3
+            set_angle_req.position4 = self.q4
+            set_angle_req.position5 = self.gripper_close
+            set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
+            set_angle_resp = set_angle(set_angle_req)
+            if set_angle_resp.success == True:
+                print("rotate suceed!")
+                rsp.success = True
+        except rospy.ServiceException as e:
+            print("Service call failed: %s" % e)
+            rsp.success = False
+            
+        return rsp
 
     # get r and t vector
     def rtvec_callback(self, rtvec_msg):

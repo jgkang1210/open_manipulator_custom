@@ -32,7 +32,8 @@ from dxlhandler import DxlHandler # custom Dynamixel handler
 from open_manipulator_custom.srv import InitAngle, InitAngleResponse
 from open_manipulator_custom.srv import SetAngle, SetAngleResponse
 from open_manipulator_custom.srv import SetAngleList, SetAngleListResponse
-
+from open_manipulator_custom.srv import CloseGripper, CloseGripperResponse
+from open_manipulator_custom.srv import ReadAngle, ReadAngleResponse
 
 # dynamixel handler
 dxlHandlerArray = []
@@ -151,11 +152,68 @@ def set_angle_list_callback(req):
 
     return rsp
 
+def close_gripper_callback(req):
+    gripper = 20
+
+    print(req)
+    
+    if req.close == True:
+        gripper = 20
+    elif req.close == False:
+        gripper = 80
+
+    print(gripper)
+
+
+    rsp = CloseGripperResponse()
+    
+    rospy.wait_for_service('read_angle_service')
+
+    try:
+        empty = Empty()
+        read_angle = rospy.ServiceProxy('read_angle_service', ReadAngle)
+        read_angle_resp = read_angle(empty)
+        #if read_angle_resp.success == True:
+            # print("read angle")
+    except rospy.ServiceException as e:
+        print("Service call failed: %s" % e)
+
+
+    q0 = [read_angle_resp.position1, read_angle_resp.position2, read_angle_resp.position3,
+            read_angle_resp.position4]  # read angle from the sensor
+
+
+    angleList = [0,180,180,90,0]
+
+    angleList[0] = q0[0]
+    angleList[1] = q0[1]
+    angleList[2] = q0[2]
+    angleList[3] = q0[3]
+    angleList[4] = gripper
+
+    for idx, dxlHandler in enumerate(dxlHandlerArray):
+        # check with led
+        dxlHandler.led_on()
+
+        # read current angle
+        success = dxlHandler.set_angle(angleList[idx])
+
+        # read angle from dynamxiel
+        rsp.success = success
+
+    # wait and turn off the led
+    for dxlHandler in dxlHandlerArray:
+        # check with led
+        dxlHandler.led_off()
+
+    return rsp
+
 def set_angle_node():
     rospy.init_node('set_angle_node')
     print("set_angle service on")
     rospy.Service('init_angle_service', InitAngle, init_angle_callback)
     rospy.Service('set_angle_service', SetAngle, set_angle_callback)
+    rospy.Service('close_gripper_service', CloseGripper, close_gripper_callback)
     rospy.Service('set_angle_list_service', SetAngleList, set_angle_list_callback)
     # rospy.Publisher('current_angle', Angle, read_angle_callback)
     rospy.spin()

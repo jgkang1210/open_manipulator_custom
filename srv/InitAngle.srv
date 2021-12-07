@@ -1,7 +1,7 @@
 float32 position1=0
 float32 position2=180
 float32 position3=180
-float32 position4=90
+float32 position4=0
 float32 position5=20
 ---
 bool success

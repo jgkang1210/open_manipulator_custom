@@ -81,6 +81,7 @@ add_service_files(
     GrabMarker.srv
     InitAngle.srv
     FollowMarker.srv
+    CloseGripper.srv
 )
 
 ## Generate actions in the 'action' folder

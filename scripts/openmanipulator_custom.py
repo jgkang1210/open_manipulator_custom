@@ -41,6 +41,7 @@ import math
 from math import cos, sin, sqrt, atan2
 from scipy.optimize import fsolve
 import modern_robotics as mr
+from numpy import rad2deg
 
 if os.name == 'nt':
     import msvcrt

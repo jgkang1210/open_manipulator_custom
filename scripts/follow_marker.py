@@ -41,6 +41,7 @@ import math
 from math import cos, sin, sqrt, atan2
 from scipy.optimize import fsolve
 import modern_robotics as mr
+from numpy import rad2deg
 
 if os.name == 'nt':
     import msvcrt
@@ -216,7 +217,7 @@ class followerHanlder():
         p_cam_cup = np.array(self.tvecs)
 
         T_base_cam = np.array([
-            [0, 1 / sqrt(2), -1 / sqrt(2), 0.065],
+            [0, -1 / sqrt(2), 1 / sqrt(2), 0.065],
             [-1, 0, 0, 0.115],
             [0, -1 / sqrt(2), -1 / sqrt(2), 0.265],
             [0, 0, 0, 1]]
@@ -245,7 +246,7 @@ class followerHanlder():
         # calculate the angle to the cup
         p_cam_cup = np.array([p_cam_cup[0], p_cam_cup[1], p_cam_cup[2], 1]).T
         p_base_cup = np.matmul(T_base_cam, p_cam_cup)
-        rotate_angle = atan2(p_cam_cup[1], p_cam_cup[0])  # atan2(y,x)
+        rotate_angle = atan2(p_base_cup[1], p_base_cup[0])  # atan2(y,x)
         desired_z = p_cam_cup[2]
 
         # get current angle
@@ -255,8 +256,8 @@ class followerHanlder():
             empty = Empty()
             read_angle = rospy.ServiceProxy('read_angle_service', ReadAngle)
             read_angle_resp = read_angle(empty)
-            if read_angle_resp.success == True:
-                print("read angle")
+            #if read_angle_resp.success == True:
+                # print("read angle")
         except rospy.ServiceException as e:
             print("Service call failed: %s" % e)
 
@@ -269,23 +270,34 @@ class followerHanlder():
         self.q2 = q0[1]
         self.q3 = q0[2]
         self.q4 = q0[3]
-
-        print(self.q1, self.q2, self.q3, self.q4)
+        
+        # print(self.q1, self.q2, self.q3, self.q4)
 
         x = p_base_cup[0]
         y = p_base_cup[1]
         z = p_base_cup[2]
 
-        q1, q2, q3 ,q4 = fsolve(self.pose_error, q0, args=[x,y,z])
+        # print("debug here")
+        # print(p_cam_cup)
+
+        # print(x,y,z)
+
+        # q1, q2, q3 ,q4 = fsolve(self.pose_error, q0, args=[x,y,z])
+
+        # print(q1,q2,q3,q4)
+        # print(self.angle_to_pose(q1,q2,q3,q4))
+
+        # print("debug here")
+        # rospy.wait_for_service("debug")
 
         rospy.wait_for_service('set_angle_service')
 
         try:
             set_angle_req = SetAngleRequest()
-            set_angle_req.position1 = float(q1)
-            set_angle_req.position2 = float(q2)
-            set_angle_req.position3 = float(q3)
-            set_angle_req.position4 = float(q4)
+            set_angle_req.position1 = float(rad2deg(rotate_angle)+90)
+            set_angle_req.position2 = float(self.q2)
+            set_angle_req.position3 = float(self.q3)
+            set_angle_req.position4 = float(0)
             set_angle_req.position5 = float(self.gripper_open)
             set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
             set_angle_resp = set_angle(set_angle_req)
@@ -293,6 +305,8 @@ class followerHanlder():
                 print("rotate suceed!")
         except rospy.ServiceException as e:
             print("Service call failed: %s" % e)
+
+        # print(x, y)
 
 
 def follow_marker_node():

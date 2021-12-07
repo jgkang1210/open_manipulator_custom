@@ -38,7 +38,7 @@ from std_msgs.msg import String
 from std_msgs.msg import Empty
 import os
 import math
-from math import cos, sin, sqrt
+from math import cos, sin, sqrt, atan2
 from scipy.optimize import fsolve
 import modern_robotics as mr
 
@@ -61,11 +61,12 @@ else:
 from dynamixel_sdk import *                 # Uses Dynamixel SDK library
 from dxlhandler import DxlHandler # custom Dynamixel handler
 from open_manipulator_custom.srv import DrawCircle, DrawCircleResponse
-from open_manipulator_custom.srv import SetAngle, SetAngleResponse
+from open_manipulator_custom.srv import SetAngle, SetAngleRequest, SetAngleResponse
 from open_manipulator_custom.srv import SetAngleList, SetAngleListResponse
 from open_manipulator_custom.msg import Rtvecs
 from open_manipulator_custom.srv import ReadAngle, ReadAngleResponse
 from open_manipulator_custom.srv import GrabMarker, GrabMarkerResponse
+
 
 # dynamixel handler
 dxlHandlerArray = []
@@ -80,7 +81,7 @@ class manipulatorHanlder():
         # servcie and subscirber list
         self.draw_circle_service = rospy.Service('draw_circle', DrawCircle, self.draw_circle_callback)
         self.grab_marker_service = rospy.Service('grab_marker', GrabMarker, self.grab_marker_callback)
-        self.rtvec_subscriber = rospy.Subscriber('/rtvecs', Rtvecs, self.grab_marker_callback, queue_size=10)
+        self.rtvec_subscriber = rospy.Subscriber('/rtvecs', Rtvecs, self.rtvec_callback, queue_size=10)
         # rotation and translation vector
         self.rvecs = np.array([0,0,0])
         self.tvecs = np.array([0,0,0])
@@ -93,7 +94,7 @@ class manipulatorHanlder():
         self.q4 = 0
         # joint grab or not
         self.grab = False
-        self.gripper_open = 140 # open
+        self.gripper_open = 80 # open
         self.gripper_clise = 20 # close
     
     ##############################################
@@ -246,8 +247,18 @@ class manipulatorHanlder():
 
     # grab the marker
     def grab_marker_callback(self, req):
+        print("grab marker service starts")
+
+        print("rvecs")
+        print(self.rvecs)
+
+        print("tvecs")
+        print(self.tvecs)
+
+        print("grab marker service starts")
+
         # response for the Grab marker service
-        rsp = DrawCircleResponse()
+        rsp = GrabMarkerResponse()
 
         # get current angle
         rospy.wait_for_service('read_angle_service')
@@ -271,19 +282,24 @@ class manipulatorHanlder():
         self.q3 = q0[2]
         self.q4 = q0[3]
 
+        print("updated angle")
+        print(self.q1, self.q2, self.q3, self.q4)
+
+        print("id")
+        print(self.id)
+
         # data from the marker
         if self.id == 1:
             print("recognize id ice americano")
 
         # get rotation and translation vector from aruco marker
-        R_cam_end = cv2.Rodrigues(self.rvecs)[0]
-        p_cam_end = np.array(self.tvecs)
+        p_cam_cup = np.array(self.tvecs)
 
-        T_base_cam = np.array(
+        T_base_cam = np.array([
             [0, 1 / sqrt(2), -1 / sqrt(2), 0.065],
             [-1, 0, 0, 0.115],
             [0, -1 / sqrt(2), -1 / sqrt(2), 0.265],
-            [0, 0, 0, 1],
+            [0, 0, 0, 1]]
         )
 
         # 1.
@@ -292,12 +308,12 @@ class manipulatorHanlder():
         rospy.wait_for_service('set_angle_service')
 
         try:
-            set_angle_req = SetAngle()
-            set_angle_req.position1 = self.q1
-            set_angle_req.position2 = self.q2
-            set_angle_req.position3 = self.q3
-            set_angle_req.position4 = self.q4
-            set_angle_req.position5 = self.gripper_open
+            set_angle_req = SetAngleRequest()
+            set_angle_req.position1 = float(self.q1)
+            set_angle_req.position2 = float(self.q2)
+            set_angle_req.position3 = float(self.q3)
+            set_angle_req.position4 = float(self.q4)
+            set_angle_req.position5 = float(self.gripper_open)
             set_angle = rospy.ServiceProxy('set_angle_service', SetAngle)
             set_angle_resp = set_angle(set_angle_req)
             if set_angle_resp.success == True:
@@ -307,9 +323,10 @@ class manipulatorHanlder():
             print("Service call failed: %s" % e)
             rsp.success = False
 
+
         # 2.
         # calculate the angle to the cup
-        p_cam_cup = np.array([p_cam_end[0], p_cam_end[1], p_cam_end[2], 1]).T
+        p_cam_cup = np.array([p_cam_cup[0], p_cam_cup[1], p_cam_cup[2], 1]).T
         p_base_cup = np.matmul(T_base_cam, p_cam_cup)
         rotate_angle = atan2(p_cam_cup[1], p_cam_cup[0])  # atan2(y,x)
         desired_z = p_cam_cup[2]
@@ -318,7 +335,7 @@ class manipulatorHanlder():
         rospy.wait_for_service('set_angle_service')
 
         try:
-            set_angle_req = SetAngle()
+            set_angle_req = SetAngleRequest()
             set_angle_req.position1 = rotate_angle
             set_angle_req.position2 = self.q2
             set_angle_req.position3 = self.q3
@@ -333,9 +350,12 @@ class manipulatorHanlder():
             print("Service call failed: %s" % e)
             rsp.success = False
 
+        print("stop here")
+        rospy.wait_for_service('nothing')
+
         # 3. get rotation and translation vector of end effector W.R.T base frame
         # 3rd order polynomial
-        R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
+        # R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
         p_base_end = self.angle_to_pose(self.q1, self.q2, self.q3, self.q4)
         
         R = np.eye(3)
@@ -413,7 +433,7 @@ class manipulatorHanlder():
         rospy.wait_for_service('set_angle_service')
 
         try:
-            set_angle_req = SetAngle()
+            set_angle_req = SetAngleRequest()
             set_angle_req.position1 = self.q1
             set_angle_req.position2 = self.q2
             set_angle_req.position3 = self.q3
@@ -430,7 +450,7 @@ class manipulatorHanlder():
 
         # pull up
         # 3rd order polynomial
-        R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
+        # R_base_end = self.angle_to_rotation(self.q1, self.q2, self.q3, self.q4)
         p_base_end = self.angle_to_pose(self.q1, self.q2, self.q3, self.q4)
 
         R = np.eye(3)
@@ -438,7 +458,7 @@ class manipulatorHanlder():
         p_base_z_up = np.array([p_base_end[0] - 0.1, p_base_end[1], p_base_end[2] + 0.1])
 
         Xstart = mr.RpToTrans(R, p_base_end)
-        Xend = mr.RpToTrans(R, p_base_cup)
+        Xend = mr.RpToTrans(R, p_base_z_up)
 
         duration = 5  # total time
         max_time_step = 50  # number of data point
@@ -541,10 +561,10 @@ def openmanipulator_custom():
 
 
 def main():
-    [x,y,z] = manipulatorHanlder.angle_to_pose(0.0, 0.0, 0.0, 0.0)
-    print(x)
-    print(y)
-    print(z)
+    #[x,y,z] = manipulatorHanlder.angle_to_pose(0.0, 0.0, 0.0, 0.0)
+    #print(x)
+    #print(y)
+    #print(z)
     openmanipulator_custom()
 
 if __name__ == '__main__':

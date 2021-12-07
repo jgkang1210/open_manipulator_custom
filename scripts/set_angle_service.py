@@ -29,6 +29,7 @@ else:
 
 from dynamixel_sdk import *                 # Uses Dynamixel SDK library
 from dxlhandler import DxlHandler # custom Dynamixel handler
+from open_manipulator_custom.srv import InitAngle, InitAngleResponse
 from open_manipulator_custom.srv import SetAngle, SetAngleResponse
 from open_manipulator_custom.srv import SetAngleList, SetAngleListResponse
 
@@ -53,6 +54,35 @@ def angle_to_pose(q1,q2,q3,q4):
         ((16*cos(q2))/125 - (3*sin(q2))/125 - (31*cos(q2)*sin(q3))/250 - (31*cos(q3)*sin(q2))/250 - (63*cos(q4)*(cos(q2)*cos(q3) - sin(q2)*sin(q3)))/500 + (63*sin(q4)*(cos(q2)*sin(q3) + cos(q3)*sin(q2)))/500 + 0.077)]
  
     return END
+
+
+def init_angle_callback(req):
+    rsp = InitAngleResponse()
+    
+    angleList = [0,180,180,90,0]
+
+    angleList[0] = req.position1
+    angleList[1] = req.position2
+    angleList[2] = req.position3
+    angleList[3] = req.position4
+    angleList[4] = req.position5
+
+    for idx, dxlHandler in enumerate(dxlHandlerArray):
+        # check with led
+        dxlHandler.led_on()
+
+        # read current angle
+        success = dxlHandler.set_angle(angleList[idx])
+
+        # read angle from dynamxiel
+        rsp.success = success
+
+    # wait and turn off the led
+    for dxlHandler in dxlHandlerArray:
+        # check with led
+        dxlHandler.led_off()
+
+    return rsp
 
 
 def set_angle_callback(req):
@@ -124,6 +154,7 @@ def set_angle_list_callback(req):
 def set_angle_node():
     rospy.init_node('set_angle_node')
     print("set_angle service on")
+    rospy.Service('init_angle_service', InitAngle, init_angle_callback)
     rospy.Service('set_angle_service', SetAngle, set_angle_callback)
     rospy.Service('set_angle_list_service', SetAngleList, set_angle_list_callback)
     # rospy.Publisher('current_angle', Angle, read_angle_callback)

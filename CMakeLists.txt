@@ -79,6 +79,8 @@ add_service_files(
     SyncGetPosition.srv
     BulkGetItem.srv
     GrabMarker.srv
+    InitAngle.srv
+    FollowMarker.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -203,6 +205,7 @@ catkin_install_python(PROGRAMS
   scripts/set_angle_service.py scripts/release_motor.py
   scripts/openmanipulator_custom.py
   scripts/aruco_detect.py
+  scripts/follow_marker.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

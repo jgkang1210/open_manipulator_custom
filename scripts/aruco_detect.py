@@ -39,7 +39,7 @@ camMatrix = np.array([[637.51624, 0., 317.66075],
                                 [0., 0., 1.]])
 distCoeffs = np.array([0.063204, -0.292048, 0.001874, 0.002631, 0.000000]).reshape(5,1)
 
-marker_length = 0.1 # m
+marker_length = 0.03 # m
 
 arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_50)
 arucoParams = cv2.aruco.DetectorParameters_create()
